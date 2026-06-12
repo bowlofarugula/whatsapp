@@ -547,6 +547,15 @@ function startLink(args: string[], eventName: string, timeoutMs = 25_000): Promi
       if (s[0] === '{') {
         try {
           const ev = JSON.parse(s) as { event?: string; data?: Record<string, unknown> }
+          // An `error` lifecycle event means wacli won't produce a link — surface it cleanly.
+          if (ev.event === 'error' && ev.data && typeof ev.data.message === 'string') {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            stopAuthChild()
+            reject(new Error(explain(ev.data.message, null)))
+            return
+          }
           if (ev.event === eventName && ev.data && typeof ev.data.code === 'string') {
             if (settled) return
             settled = true
@@ -1018,7 +1027,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
           if (!/^\+?[\d][\d\s().-]{6,}$/.test(phone)) {
             throw new Error(`"${phone}" doesn't look like a phone number. Use +country format, e.g. +15551234567.`)
           }
-          const code = await startLink(['auth', '--phone', phone, '--events', '--json'], 'pair_code')
+          const code = await startLink(['auth', '--phone', phone, '--events'], 'pair_code')
           const pretty = code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code
           return {
             content: [{
@@ -1036,7 +1045,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
         }
 
         // QR (default): wacli emits the QR string; we render it to a PNG and open it.
-        const payload = await startLink(['auth', '--qr-format', 'text', '--events', '--json'], 'qr_code')
+        const payload = await startLink(['auth', '--qr-format', 'text', '--events'], 'qr_code')
         const file = await renderQrToFile(payload)
         return {
           content: [{
