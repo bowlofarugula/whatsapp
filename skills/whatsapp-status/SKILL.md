@@ -16,9 +16,9 @@ then a "what to do" section only if something failed (point at the matching
 2. **bun present**: `bun --version || "$HOME/.bun/bin/bun" --version`.
    Missing → setup step 2.
 3. **Device linked**: call the `status` tool (or `wacli auth status`).
-   Not authenticated → run `/whatsapp-setup` (or the `authenticate` tool): give
-   the user's number, then they enter the pairing code on their phone — no QR,
-   no terminal.
+   Not authenticated → run `/whatsapp-setup` (or the `authenticate` tool): it
+   pops up a QR for them to scan with their phone (or `method:"code"` + their
+   number for a pairing code) — no terminal.
 4. **Local store reachable**: `wacli doctor --json 2>&1 | head -40` — reports
    store layout, auth identity, FTS/search state, and counts. A quick content
    check: `wacli chats list --limit 1 --json --read-only` returns a chat (or an

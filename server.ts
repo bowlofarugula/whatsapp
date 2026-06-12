@@ -31,8 +31,9 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 import { spawnSync, spawn, type ChildProcess } from 'child_process'
 import { readFileSync, statSync } from 'fs'
-import { homedir, userInfo } from 'os'
+import { homedir, userInfo, tmpdir } from 'os'
 import { join } from 'path'
+import * as QRCode from 'qrcode'
 
 // Last-resort safety net — without these the process dies silently on any
 // unhandled promise rejection. With them it logs and keeps serving tools.
@@ -491,13 +492,14 @@ async function watchMessages(opts: { jid?: string; since?: string; timeoutMs: nu
   return collected.sort((a, b) => (a.at?.getTime() ?? 0) - (b.at?.getTime() ?? 0))
 }
 
-// --- device linking (phone pairing-code auth) --------------------------------
+// --- device linking (QR scan / phone pairing-code auth) ----------------------
 
-// `wacli auth --phone <n> --events` is a long-lived process: it requests a
-// pairing code, prints it as an NDJSON `pair_code` event on stderr, then waits
-// for the user to enter that code on their phone, and finally bootstrap-syncs.
-// We keep that process alive across MCP calls (module state) so the link can
-// complete after we've returned the code, and re-issuing kills the old one.
+// `wacli auth ... --events` is a long-lived process: it requests a link (a
+// pairing code with --phone, or a QR with --qr-format text), prints it as an
+// NDJSON event on stderr, then waits for the user to complete the link on their
+// phone, and finally bootstrap-syncs. We keep that process alive across MCP
+// calls (module state) so the link can complete after we've returned the
+// code/QR, and re-issuing kills the old one.
 let authChild: ChildProcess | null = null
 let authKillTimer: ReturnType<typeof setTimeout> | null = null
 const AUTH_MAX_LIFETIME_MS = 5 * 60_000 // backstop: never leave an auth process running forever
@@ -512,15 +514,16 @@ const isAuthenticated = (): boolean => {
   return (a.data as Record<string, unknown> | undefined)?.authenticated === true
 }
 
-// Start (or restart) a phone pairing-code link and resolve with the code as soon
-// as wacli emits it. Leaves the child RUNNING so the pairing can complete; the
-// caller polls auth status for `authenticated:true`.
-function startPhoneLink(phone: string, timeoutMs = 25_000): Promise<string> {
+// Start (or restart) a device link and resolve with the payload (pairing code,
+// or the QR string to render) as soon as wacli emits the named NDJSON event
+// (`pair_code` or `qr_code`, each carrying `data.code`). Leaves the child
+// RUNNING so the link can complete; the caller polls auth status.
+function startLink(args: string[], eventName: string, timeoutMs = 25_000): Promise<string> {
   stopAuthChild() // re-issue: drop any prior attempt
   return new Promise<string>((resolve, reject) => {
     let child: ChildProcess
     try {
-      child = spawn(WACLI, ['auth', '--phone', phone, '--events', '--json'], { stdio: ['ignore', 'pipe', 'pipe'] })
+      child = spawn(WACLI, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     } catch (e) {
       return reject(e instanceof Error ? e : new Error(String(e)))
     }
@@ -533,18 +536,18 @@ function startPhoneLink(phone: string, timeoutMs = 25_000): Promise<string> {
       settled = true
       stopAuthChild()
       reject(new Error(
-        `wacli didn't return a pairing code in ${timeoutMs / 1000}s.` +
+        `wacli didn't return a link in ${timeoutMs / 1000}s.` +
         (stderrTail.trim() ? ` Last output: ${stderrTail.trim().split('\n').slice(-2).join(' ')}` : ''),
       ))
     }, timeoutMs)
 
-    // The pair_code NDJSON event lands on stderr (alongside human lines).
+    // The link NDJSON event lands on stderr (alongside human lines).
     const onLine = (line: string): void => {
       const s = line.trim()
       if (s[0] === '{') {
         try {
           const ev = JSON.parse(s) as { event?: string; data?: Record<string, unknown> }
-          if (ev.event === 'pair_code' && ev.data && typeof ev.data.code === 'string') {
+          if (ev.event === eventName && ev.data && typeof ev.data.code === 'string') {
             if (settled) return
             settled = true
             clearTimeout(timer)
@@ -575,13 +578,26 @@ function startPhoneLink(phone: string, timeoutMs = 25_000): Promise<string> {
       reject(e.code === 'ENOENT' ? new Error(NOT_INSTALLED) : e)
     })
     child.on('exit', code => {
-      if (settled) return // exited before emitting a code — surface why
+      if (settled) return // exited before emitting a payload — surface why
       settled = true
       clearTimeout(timer)
       if (authChild === child) authChild = null
       reject(new Error(explain(stderrTail.trim() || `wacli auth exited ${code}`, code)))
     })
   })
+}
+
+// Render a QR payload to a PNG in the temp dir and try to open it in the OS image
+// viewer (so it's full-size and scannable — no terminal). Returns the file path;
+// opening is best-effort (the path is also handed back as a fallback link).
+async function renderQrToFile(payload: string): Promise<string> {
+  const path = join(tmpdir(), `whatsapp-link-${Date.now()}.png`)
+  await QRCode.toFile(path, payload, { width: 512, margin: 2, errorCorrectionLevel: 'M' })
+  if (process.env.WHATSAPP_QR_NO_OPEN !== '1') {
+    const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open'
+    try { spawn(opener, [path], { stdio: 'ignore', detached: true }).unref() } catch {}
+  }
+  return path
 }
 
 // --- mcp -----------------------------------------------------------------------
@@ -595,8 +611,8 @@ const mcp = new Server(
       'reads WhatsApp, not this session — anything you want them to see goes through send_message.',
       '',
       'If a tool reports "not linked", link this device with the `authenticate` tool (or /whatsapp-setup):',
-      'ask the user for their WhatsApp number, call authenticate, have them enter the returned pairing code',
-      'on their phone, then poll `status` until linked. No QR or terminal needed.',
+      'call authenticate (it opens a QR to scan by default; or method:"code" with the user\'s number returns',
+      'a pairing code), then poll `status` until linked. No terminal needed.',
       '',
       'wacli reads from a LOCAL synced store; read_messages/search_messages/list_chats refresh it first',
       '(a bounded best-effort sync), so very recent messages may lag by a sync pass. Reads are read-only',
@@ -750,16 +766,18 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'authenticate',
       description:
-        'Link this device to the user\'s WhatsApp account using a PHONE PAIRING CODE — no QR, no terminal. ' +
-        'If already linked, returns immediately. Otherwise pass the user\'s WhatsApp number in +country format ' +
-        '(e.g. +15551234567); this returns an 8-character pairing code for them to enter on their phone ' +
-        '(WhatsApp → Settings → Linked Devices → Link a Device → "Link with phone number instead"). Linking ' +
-        'continues in the background — after they enter the code, poll the `status` tool until it reports ' +
-        'linked (wacli then auto-runs the initial sync). If the code lapses, call this again for a fresh one.',
+        'Link this device to the user\'s WhatsApp account — no terminal needed. If already linked, returns ' +
+        'immediately. Default method "qr": renders a QR code to an image and opens it on screen for the user ' +
+        'to scan (WhatsApp → Settings → Linked Devices → Link a Device → scan) — no phone number required. ' +
+        'Method "code": pass the user\'s WhatsApp number in +country format and it returns an 8-char pairing ' +
+        'code to enter on their phone ("Link with phone number instead"). Either way linking continues in the ' +
+        'background — poll the `status` tool until linked (wacli then auto-runs the initial sync). Call again ' +
+        'for a fresh QR/code if it lapses.',
       inputSchema: {
         type: 'object',
         properties: {
-          phone: { type: 'string', description: 'The user\'s WhatsApp phone number in +country format, e.g. +15551234567. Required unless already linked.' },
+          method: { type: 'string', enum: ['qr', 'code'], description: 'Linking method. "qr" (default) opens a scannable QR image — easiest. "code" returns a pairing code (requires `phone`).' },
+          phone: { type: 'string', description: 'The user\'s WhatsApp phone number in +country format (e.g. +15551234567). Required only for method "code".' },
         },
       },
     },
@@ -982,27 +1000,48 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
           stopAuthChild()
           return { content: [{ type: 'text', text: '✅ Already linked — WhatsApp is connected on this device. Nothing to do.' }] }
         }
-        const phone = String(args.phone ?? '').trim()
-        if (!phone) {
-          throw new Error('Not linked yet. Provide the user\'s WhatsApp phone number in +country format (e.g. +15551234567) to start the pairing-code link.')
+        const method = (args.method as string | undefined) === 'code' ? 'code' : 'qr' // QR by default
+
+        if (method === 'code') {
+          const phone = String(args.phone ?? '').trim()
+          if (!phone) {
+            throw new Error('For the code method, provide the user\'s WhatsApp phone number in +country format (e.g. +15551234567). Or omit `method` to use the QR.')
+          }
+          if (!/^\+?[\d][\d\s().-]{6,}$/.test(phone)) {
+            throw new Error(`"${phone}" doesn't look like a phone number. Use +country format, e.g. +15551234567.`)
+          }
+          const code = await startLink(['auth', '--phone', phone, '--events', '--json'], 'pair_code')
+          const pretty = code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code
+          return {
+            content: [{
+              type: 'text',
+              text:
+                `Pairing code: ${pretty}\n\n` +
+                `On the phone with WhatsApp account ${phone}:\n` +
+                `1. Open WhatsApp → Settings → Linked Devices → Link a Device\n` +
+                `2. Tap "Link with phone number instead"\n` +
+                `3. Enter this code: ${pretty}\n\n` +
+                `Linking continues in the background. Once it's entered, I'll check with the status tool and ` +
+                `confirm. The code expires in a few minutes; if it lapses, ask me for a fresh one.`,
+            }],
+          }
         }
-        if (!/^\+?[\d][\d\s().-]{6,}$/.test(phone)) {
-          throw new Error(`"${phone}" doesn't look like a phone number. Use +country format, e.g. +15551234567.`)
-        }
-        const code = await startPhoneLink(phone)
-        const pretty = code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code
+
+        // QR (default): wacli emits the QR string; we render it to a PNG and open it.
+        const payload = await startLink(['auth', '--qr-format', 'text', '--events', '--json'], 'qr_code')
+        const file = await renderQrToFile(payload)
         return {
           content: [{
             type: 'text',
             text:
-              `Pairing code: ${pretty}\n\n` +
-              `On the phone with WhatsApp account ${phone}:\n` +
+              `I've opened a QR code in your image viewer — scan it with your phone to link WhatsApp.\n\n` +
+              `On your phone:\n` +
               `1. Open WhatsApp → Settings → Linked Devices → Link a Device\n` +
-              `2. Tap "Link with phone number instead"\n` +
-              `3. Enter this code: ${pretty}\n\n` +
-              `Linking continues in the background. Once it's entered, I'll check with the status tool and ` +
-              `confirm — wacli then pulls in your recent messages automatically. The code expires in a few ` +
-              `minutes; if it lapses before you enter it, just ask me for a fresh one.`,
+              `2. Point the camera at the QR code on screen.\n\n` +
+              `If it didn't pop up, open this file: ${file}\n\n` +
+              `Linking continues in the background — once you scan, I'll confirm and pull in your recent ` +
+              `messages. The QR refreshes every ~20s; if it expires before you scan, ask me for a fresh one. ` +
+              `(Prefer typing a code instead? Say so and give your number — I'll switch to the code method.)`,
           }],
         }
       }

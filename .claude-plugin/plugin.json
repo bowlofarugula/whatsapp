@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "whatsapp",
   "version": "0.1.0",
-  "description": "Send and read WhatsApp messages with Claude, Gmail-style: human-in-the-loop, no auto-replies. Ships a WhatsApp MCP server over the wacli engine (authenticate, send_message, list_chats, read_messages, search_messages, react, watch, status, plus contacts/groups helpers) and skills for sending, reading, listening, and one-time in-chat pairing-code setup (no QR, no terminal). Cross-platform (macOS/Linux/Windows).",
+  "description": "Send and read WhatsApp messages with Claude, Gmail-style: human-in-the-loop, no auto-replies. Ships a WhatsApp MCP server over the wacli engine (authenticate, send_message, list_chats, read_messages, search_messages, react, watch, status, plus contacts/groups helpers) and skills for sending, reading, listening, and one-time in-chat device linking (scan a QR or enter a pairing code, no terminal). Cross-platform (macOS/Linux/Windows).",
   "author": {
     "name": "Ian McDonald"
   },

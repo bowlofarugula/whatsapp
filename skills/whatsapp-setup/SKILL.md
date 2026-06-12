@@ -1,6 +1,6 @@
 ---
 name: whatsapp-setup
-description: One-time setup for WhatsApp from Claude — verifies the bundled wacli engine and links the device with an in-chat pairing code (no QR, no terminal) via the authenticate tool, then the initial sync. Use when the user asks to set up WhatsApp, when the WhatsApp tools (send_message/read_messages) are missing or erroring, or before the first send/read on a new machine.
+description: One-time setup for WhatsApp from Claude — verifies the bundled wacli engine and links the device by scanning an in-chat QR (or entering a pairing code), no terminal, via the authenticate tool, then the initial sync. Use when the user asks to set up WhatsApp, when the WhatsApp tools (send_message/read_messages) are missing or erroring, or before the first send/read on a new machine.
 user-invocable: true
 ---
 
@@ -18,9 +18,9 @@ over it that exposes `authenticate` (device linking), `send_message`,
 `status` in every session.
 
 The user may be non-technical and is probably in the **Claude desktop app, not
-a terminal**. Linking happens **right here in chat** — no terminal, no QR to
-scan. Run every check yourself; the only thing they do by hand is enter one
-short code on their phone.
+a terminal**. Linking happens **right here in chat** — no terminal. Run every
+check yourself; the only thing they do by hand is scan a QR with their phone
+(or type one short code, if they prefer).
 
 Arguments passed: `$ARGUMENTS` (optional)
 
@@ -81,27 +81,33 @@ Missing → `curl -fsSL https://bun.sh/install | bash`. The plugin's `start`
 script runs `bun install` itself on first launch, so there's nothing to
 install by hand.
 
-## Step 3 — link the device (a pairing code, in chat — no terminal, no QR)
+## Step 3 — link the device (scan a QR, in chat — no terminal)
 
 This is the one real human step, and it happens **right here in the
 conversation** using the **`authenticate` MCP tool**. Drive it for them:
 
-1. **Ask for their WhatsApp phone number** in `+country` format (e.g.
-   `+15551234567`) — the number whose WhatsApp account you're linking.
-2. **Call the `authenticate` tool** with that number. It returns an
-   8-character **pairing code** (shown like `ABCD-1234`).
-3. **Relay the code** with these exact phone steps:
-   > On your phone, open **WhatsApp → Settings → Linked Devices → Link a
-   > Device**, tap **"Link with phone number instead"**, and enter the code:
-   > **ABCD-1234**
-4. **Wait, then confirm.** After they say they've entered it (or give it a few
+1. **Call the `authenticate` tool** (no arguments — it defaults to the QR
+   method). It renders a QR code to an image and **opens it on their screen**,
+   and returns a file path as a backup.
+2. **Walk them through scanning**, in plain language:
+   > A QR code just opened on your screen. On your phone, open **WhatsApp →
+   > Settings → Linked Devices → Link a Device**, and point the camera at it.
+   >
+   > (If nothing opened, open the image file I gave you and scan that.)
+3. **Wait, then confirm.** After they say they've scanned it (or give it a few
    seconds), **call the `status` tool** and check for "device linked". Poll
    `status` every ~10s until it flips to linked. On link, wacli **automatically
    pulls in their recent messages** — `status` starts showing synced chats.
 
-If the code lapses before they enter it (it's valid a few minutes), just call
-`authenticate` again to issue a fresh one. If `authenticate` says it's already
+The QR refreshes about every 20 seconds. If it expires before they scan, just
+call `authenticate` again for a fresh one. If `authenticate` says it's already
 linked, you're done — skip to Step 4.
+
+**Prefer a code over scanning?** If they'd rather type a code than scan (or the
+QR won't open on their setup), call `authenticate` with `method: "code"` and
+their **phone number** (`+country` format). It returns an 8-char code; they
+enter it on the phone via **Linked Devices → Link a Device → "Link with phone
+number instead"**. Same background-link + `status` poll as above.
 
 > The session persists in wacli's local store (`~/.wacli`) and lasts as long as
 > the device stays linked on the phone. Unlinking it from the phone ends the

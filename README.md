@@ -34,8 +34,9 @@ terminal). It runs in every session and exposes:
   cursor to resume from), for catching a reply that's expected shortly
 - **`list_contacts`** / **`list_groups`** — look up synced contacts and the
   groups you're in (their JIDs are what you address elsewhere)
-- **`authenticate`** — link this device to your WhatsApp via a phone pairing
-  code, entirely in chat (no QR, no terminal); used by `/whatsapp-setup`
+- **`authenticate`** — link this device to your WhatsApp by scanning a QR
+  (or entering a pairing code), entirely in chat — no terminal; used by
+  `/whatsapp-setup`
 - **`status`** — health check (installed, linked, store reachable)
 
 ### The sync wrinkle
@@ -54,10 +55,10 @@ terminal; the plugin coexists with it. Disable the auto-sync-before-read with
 1. The `wacli` engine ships **bundled** with the plugin on macOS (universal
    arm64 + x86_64 binary in `bin/`) — no install step. (Linux/Windows, or as a
    fallback: `brew install openclaw/tap/wacli`, or set `WACLI_PATH`.)
-2. **Link your phone, in chat** — tell Claude your WhatsApp number; it gives you
-   an 8-character pairing code to enter on your phone (**WhatsApp → Settings →
-   Linked Devices → Link a Device → "Link with phone number instead"**). No QR,
-   no terminal. wacli then pulls in your recent messages automatically.
+2. **Link your phone, in chat** — Claude pops up a QR code; on your phone open
+   **WhatsApp → Settings → Linked Devices → Link a Device** and scan it. (Prefer
+   typing a code? Claude can give you an 8-character pairing code instead.) No
+   terminal. wacli then pulls in your recent messages automatically.
 3. That's it — no Full Disk Access, no system permission toggles
 
 Run `/whatsapp-setup` (or just say "set up WhatsApp") and Claude walks you
@@ -65,7 +66,7 @@ through it conversationally.
 
 | Skill | Does |
 | --- | --- |
-| `/whatsapp-setup` | One-time setup: verify the bundled `wacli` engine + the in-chat pairing-code link |
+| `/whatsapp-setup` | One-time setup: verify the bundled `wacli` engine + the in-chat QR/code device link |
 | `/whatsapp-send` | Send a message (confirms recipient + exact wording first) |
 | `/whatsapp-messages` | Read threads, resolve "Sam" → chat via synced contacts |
 | `/whatsapp-listen` | Session-bound watch: "tell me when Alex replies" — polls, notifies, drafts replies for approval, never auto-sends |
