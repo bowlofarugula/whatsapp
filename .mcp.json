@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "whatsapp": {
+      "command": "/bin/sh",
+      "args": [
+        "-c",
+        "BUN=\"$(command -v bun || echo \"$HOME/.bun/bin/bun\")\"; exec \"$BUN\" run --cwd \"${CLAUDE_PLUGIN_ROOT}\" --shell=bun --silent start"
+      ]
+    }
+  }
+}

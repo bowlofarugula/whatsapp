@@ -1,0 +1,12 @@
+#!/bin/sh
+# Bundled wacli launcher. Ships a macOS universal binary (arm64 + x86_64).
+# On other platforms, defer to an installed wacli (never recurse into this stub).
+DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ "$(uname -s)" = "Darwin" ] && [ -x "$DIR/darwin/wacli" ]; then
+  exec "$DIR/darwin/wacli" "$@"
+fi
+for c in /opt/homebrew/bin/wacli /usr/local/bin/wacli /home/linuxbrew/.linuxbrew/bin/wacli; do
+  [ -x "$c" ] && exec "$c" "$@"
+done
+echo "wacli: no bundled binary for $(uname -sm) and none installed — run: brew install openclaw/tap/wacli" >&2
+exit 127

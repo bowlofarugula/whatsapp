@@ -1,0 +1,14 @@
+whatsapp
+Copyright 2026 Ian McDonald
+
+The WhatsApp engine is openclaw/wacli (https://github.com/openclaw/wacli),
+Copyright the wacli authors and contributors, licensed under the MIT License.
+wacli is a Go CLI built on whatsmeow (https://github.com/tulir/whatsmeow) that
+pairs as a linked WhatsApp Web device and does all of the reading, sending,
+syncing, searching, and group/contact work. This plugin shells out to the
+`wacli` CLI; it bundles a thin MCP server (server.ts) over that CLI and the
+skills that drive it.
+
+A prebuilt `wacli` binary (macOS universal, arm64 + x86_64) is redistributed at
+`bin/darwin/wacli`, from the openclaw/wacli v0.11.1 release, under the MIT
+License. The wacli LICENSE terms apply to that file.

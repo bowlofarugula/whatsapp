@@ -1,0 +1,8 @@
+# Installed at runtime by the plugin's `start` script (bun install); never committed.
+node_modules/
+
+# macOS / editor cruft
+.DS_Store
+*.log
+
+# Note: bin/ IS committed on purpose — it holds the bundled wacli engine.
