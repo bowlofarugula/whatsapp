@@ -782,6 +782,14 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'logout',
+      description:
+        'Unlink this device from WhatsApp (runs `wacli auth logout`) — ends the linked-device session and ' +
+        'clears local auth, so WhatsApp tools stop working until re-linked via `authenticate` / /whatsapp-setup. ' +
+        'It does NOT delete the synced message store, only the session. Confirm with the user before calling.',
+      inputSchema: { type: 'object', properties: {} },
+    },
+    {
       name: 'status',
       description:
         'Health check for WhatsApp: whether wacli is installed, the device is linked/authenticated, and the ' +
@@ -1044,6 +1052,16 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
               `(Prefer typing a code instead? Say so and give your number — I'll switch to the code method.)`,
           }],
         }
+      }
+
+      case 'logout': {
+        stopAuthChild() // cancel any in-flight link attempt
+        if (!isAuthenticated()) {
+          return { content: [{ type: 'text', text: 'Already logged out — no linked WhatsApp session on this device.' }] }
+        }
+        const r = callWacli(['auth', 'logout', '--json'])
+        if (!r.ok) throw new Error(explain(r.error ?? '', r.code))
+        return { content: [{ type: 'text', text: '✅ Logged out — this device is unlinked from WhatsApp. Re-link any time with the `authenticate` tool (or /whatsapp-setup). Your synced messages stay in the local store.' }] }
       }
 
       case 'status': {

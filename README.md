@@ -37,6 +37,8 @@ terminal). It runs in every session and exposes:
 - **`authenticate`** — link this device to your WhatsApp by scanning a QR
   (or entering a pairing code), entirely in chat — no terminal; used by
   `/whatsapp-setup`
+- **`logout`** — unlink this device (`wacli auth logout`); ends the session,
+  keeps the synced store. Re-link with `authenticate`
 - **`status`** — health check (installed, linked, store reachable)
 
 ### The sync wrinkle
