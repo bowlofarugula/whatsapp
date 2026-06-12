@@ -54,9 +54,12 @@ terminal; the plugin coexists with it. Disable the auto-sync-before-read with
 
 ## Setup (one-time, ~5 minutes)
 
-1. The `wacli` engine ships **bundled** with the plugin on macOS (universal
-   arm64 + x86_64 binary in `bin/`) — no install step. (Linux/Windows, or as a
-   fallback: `brew install openclaw/tap/wacli`, or set `WACLI_PATH`.)
+1. The setup skill **installs the `wacli` engine for you** — it downloads
+   the official [openclaw/wacli](https://github.com/openclaw/wacli) release
+   binary (universal arm64 + x86_64, checksum verified) into
+   `~/.claude/whatsapp/engine`. No Homebrew or developer tools needed.
+   (Linux/Windows, or as a fallback: `brew install openclaw/tap/wacli`, or
+   set `WACLI_PATH`.)
 2. **Link your phone, in chat** — Claude pops up a QR code; on your phone open
    **WhatsApp → Settings → Linked Devices → Link a Device** and scan it. (Prefer
    typing a code? Claude can give you an 8-character pairing code instead.) No
@@ -68,7 +71,7 @@ through it conversationally.
 
 | Skill | Does |
 | --- | --- |
-| `/whatsapp-setup` | One-time setup: verify the bundled `wacli` engine + the in-chat QR/code device link |
+| `/whatsapp-setup` | One-time setup: install the `wacli` engine (official release download) + the in-chat QR/code device link |
 | `/whatsapp-send` | Send a message (confirms recipient + exact wording first) |
 | `/whatsapp-messages` | Read threads, resolve "Sam" → chat via synced contacts |
 | `/whatsapp-listen` | Session-bound watch: "tell me when Alex replies" — polls, notifies, drafts replies for approval, never auto-sends |

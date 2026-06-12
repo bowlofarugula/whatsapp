@@ -10,9 +10,9 @@ Run all checks, then report in plain language: one line per check with ✅/❌,
 then a "what to do" section only if something failed (point at the matching
 `/whatsapp-setup` step).
 
-1. **wacli engine present**: bundled with the plugin on macOS —
+1. **wacli engine present**: /whatsapp-setup installs it to `~/.claude/whatsapp/engine` —
    `"${CLAUDE_PLUGIN_ROOT:-.}/bin/wacli" --version 2>/dev/null || wacli --version 2>/dev/null || echo MISSING`.
-   `MISSING` → setup step 1 (macOS: bundled binary not found; Linux/Windows: `brew install openclaw/tap/wacli` or set `WACLI_PATH`).
+   `MISSING` → setup step 1 installs it (fallback `brew install openclaw/tap/wacli` or set `WACLI_PATH`).
 2. **bun present**: `bun --version || "$HOME/.bun/bin/bun" --version`.
    Missing → setup step 2.
 3. **Device linked**: call the `status` tool (or `wacli auth status`).

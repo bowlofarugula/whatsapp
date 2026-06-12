@@ -1,4 +1,0 @@
-# The bundled wacli engine binary is large (macOS universal ~42MB) — store it in
-# Git LFS so it doesn't bloat repo history. The tiny bin/wacli launcher stub is a
-# shell script and stays a normal text-tracked file.
-bin/darwin/wacli filter=lfs diff=lfs merge=lfs -text

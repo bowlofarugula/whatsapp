@@ -11,9 +11,10 @@
  * Claude desktop app — no whatsmeow or WhatsApp protocol lives here.
  *
  * Requires:
- *   - `wacli` — ships BUNDLED in this plugin's bin/ (macOS universal binary);
- *     resolved from there first, with `brew install openclaw/tap/wacli` and
- *     WACLI_PATH as fallbacks (and for Linux/Windows).
+ *   - `wacli` — installed by /whatsapp-setup from the official openclaw/wacli
+ *     release into ~/.claude/whatsapp/engine; resolved from there first, with
+ *     `brew install openclaw/tap/wacli` and WACLI_PATH as fallbacks (and for
+ *     Linux/Windows).
  *   - a paired session: `wacli auth` (scan the QR with your phone's WhatsApp).
  *
  * The wrinkle vs. iMessage: wacli reads only what it has SYNCED into its
@@ -46,37 +47,18 @@ process.on('uncaughtException', err => {
 
 // --- wacli location & invocation ---------------------------------------------
 
-// wacli ships BUNDLED in this plugin's bin/ (a macOS universal binary covering
-// arm64 + x86_64). Prefer it so there's no install step on macOS. The binary
-// sits next to this script on disk, so resolving it relative to import.meta.dir
-// is reachable in both the CLI and the Claude desktop app regardless of whether
-// the plugin bin/ dir made it onto the Bash PATH (undocumented in Desktop). We
-// only bundle macOS; other platforms (and a missing bundle) fall through to the
-// shell PATH and Homebrew prefixes — the documented brew fallback. GUI-launched
-// apps also don't inherit a login shell's PATH, which is why a bare `wacli`
-// often isn't found.
-// If the bundled binary is committed via Git LFS and the plugin was synced
-// without LFS support, the file on disk is a ~133-byte text POINTER, not the
-// real binary. A real wacli is tens of MB, so a tiny file at the bundle path is
-// an unfetched pointer — skip it (and flag it) rather than exec'ing text.
-let bundledIsLfsPointer = false
-const isUsableBinary = (p: string): boolean => {
-  try { const st = statSync(p); return st.isFile() && st.size >= 4096 } catch { return false }
-}
-const isLfsPointer = (p: string): boolean => {
-  try { const st = statSync(p); return st.isFile() && st.size < 4096 } catch { return false }
-}
+// wacli is installed by /whatsapp-setup into ~/.claude/whatsapp/engine — a
+// fixed absolute path, so it's reachable in both the CLI and the Claude desktop
+// app. (GUI-launched apps don't inherit a login shell's PATH, which is why a
+// bare `wacli` often isn't found.) Other platforms and power users fall through
+// to the shell PATH and Homebrew prefixes. Resolution order: explicit override
+// → installed engine → PATH → Homebrew prefixes.
+const ENGINE_DIR = join(homedir(), '.claude', 'whatsapp', 'engine')
 
 function locateWacli(): string {
   if (process.env.WACLI_PATH) return process.env.WACLI_PATH
-  if (process.platform === 'darwin') {
-    const roots = [import.meta.dir, process.env.CLAUDE_PLUGIN_ROOT].filter(Boolean) as string[]
-    for (const r of roots) {
-      const p = join(r, 'bin', 'darwin', 'wacli')
-      if (isUsableBinary(p)) return p
-      if (isLfsPointer(p)) bundledIsLfsPointer = true
-    }
-  }
+  const engine = join(ENGINE_DIR, 'wacli')
+  try { if (statSync(engine).isFile()) return engine } catch {}
   const which = spawnSync('command', ['-v', 'wacli'], { shell: '/bin/sh', encoding: 'utf8' })
   if (which.status === 0 && which.stdout.trim()) return which.stdout.trim()
   for (const p of [
@@ -91,15 +73,10 @@ function locateWacli(): string {
 
 const WACLI = locateWacli()
 
-const NOT_INSTALLED = bundledIsLfsPointer
-  ? 'The bundled wacli binary (bin/darwin/wacli) is an unfetched Git LFS pointer — the plugin was ' +
-    'synced without Git LFS, so the real binary never came down. Install git-lfs (`brew install ' +
-    'git-lfs && git lfs install`) and re-sync/reinstall the plugin, or `brew install openclaw/tap/wacli` ' +
-    '(or set WACLI_PATH) to use a system wacli.'
-  : 'wacli engine not found. A macOS build ships bundled with this plugin ' +
-    '(bin/darwin/wacli), so on a Mac this should not happen — run /whatsapp-setup. ' +
-    'On Linux/Windows, or as a fallback, install it with `brew install openclaw/tap/wacli` ' +
-    '(or download a release binary) and/or set WACLI_PATH.'
+const NOT_INSTALLED =
+  'wacli engine not installed — run /whatsapp-setup, which downloads it from the official ' +
+  'openclaw/wacli release into ~/.claude/whatsapp/engine. Alternatives: ' +
+  '`brew install openclaw/tap/wacli`, or set WACLI_PATH.'
 
 type WacliResult = { ok: boolean; stdout: string; stderr: string; code: number | null }
 
@@ -1076,14 +1053,13 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
       case 'status': {
         const lines: string[] = []
         let installed = false
-        // Bundled-binary diagnostic: report the bundled file's state explicitly,
-        // independent of any system/brew fallback, so it's clear whether plugin
-        // sync (incl. Git LFS) actually delivered the real binary.
-        if (process.platform === 'darwin') {
-          const bundled = join(import.meta.dir, 'bin', 'darwin', 'wacli')
-          if (isUsableBinary(bundled)) lines.push('✅ bundled wacli present (bin/darwin/wacli)')
-          else if (isLfsPointer(bundled)) lines.push('⚠️ bundled wacli is an UNFETCHED Git LFS POINTER — plugin synced without LFS; the real binary never came down')
-          else lines.push('ℹ️ no bundled wacli at bin/darwin/wacli')
+        {
+          const engine = join(ENGINE_DIR, 'wacli')
+          let engineInstalled = false
+          try { engineInstalled = statSync(engine).isFile() } catch {}
+          lines.push(engineInstalled
+            ? '✅ wacli engine installed (~/.claude/whatsapp/engine)'
+            : 'ℹ️ no engine at ~/.claude/whatsapp/engine — /whatsapp-setup installs it')
         }
         lines.push(`   engine in use: ${WACLI}`)
         try {

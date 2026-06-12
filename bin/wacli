@@ -1,12 +1,12 @@
 #!/bin/sh
-# Bundled wacli launcher. Ships a macOS universal binary (arm64 + x86_64).
-# On other platforms, defer to an installed wacli (never recurse into this stub).
-DIR="$(cd "$(dirname "$0")" && pwd)"
-if [ "$(uname -s)" = "Darwin" ] && [ -x "$DIR/darwin/wacli" ]; then
-  exec "$DIR/darwin/wacli" "$@"
-fi
+# wacli launcher — prefers the engine installed by /whatsapp-setup
+# (~/.claude/whatsapp/engine), then an installed wacli (Homebrew, PATH;
+# never recurses into this stub). WACLI_PATH overrides everything.
+[ -n "$WACLI_PATH" ] && exec "$WACLI_PATH" "$@"
+ENGINE="$HOME/.claude/whatsapp/engine/wacli"
+[ -x "$ENGINE" ] && exec "$ENGINE" "$@"
 for c in /opt/homebrew/bin/wacli /usr/local/bin/wacli /home/linuxbrew/.linuxbrew/bin/wacli; do
   [ -x "$c" ] && exec "$c" "$@"
 done
-echo "wacli: no bundled binary for $(uname -sm) and none installed — run: brew install openclaw/tap/wacli" >&2
+echo "wacli: engine not installed — run /whatsapp-setup (or: brew install openclaw/tap/wacli)" >&2
 exit 127

@@ -77,8 +77,9 @@ the ban risk on a linked device is real.
 ## wacli CLI fallback
 
 Only if the MCP tools aren't available in this session (e.g. setup
-incomplete). On macOS the bundled binary is at
-`${CLAUDE_PLUGIN_ROOT}/bin/wacli`; otherwise a brew `wacli` on PATH:
+incomplete). The plugin's launcher at `${CLAUDE_PLUGIN_ROOT}/bin/wacli`
+finds the installed engine (`~/.claude/whatsapp/engine`, or a brew `wacli`
+on PATH):
 
 ```sh
 "${CLAUDE_PLUGIN_ROOT:-.}/bin/wacli" send text --to "<phone-or-jid-or-name>" --message "<text>"

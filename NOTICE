@@ -9,6 +9,7 @@ syncing, searching, and group/contact work. This plugin shells out to the
 `wacli` CLI; it bundles a thin MCP server (server.ts) over that CLI and the
 skills that drive it.
 
-A prebuilt `wacli` binary (macOS universal, arm64 + x86_64) is redistributed at
-`bin/darwin/wacli`, from the openclaw/wacli v0.11.1 release, under the MIT
-License. The wacli LICENSE terms apply to that file.
+The `wacli` binary itself is not redistributed here — the /whatsapp-setup
+skill downloads it from the official openclaw/wacli GitHub release
+(checksum-verified) onto the user's machine. The wacli LICENSE terms apply
+to it.

@@ -1,6 +1,6 @@
 ---
 name: whatsapp-setup
-description: One-time setup for WhatsApp from Claude — verifies the bundled wacli engine and links the device by scanning an in-chat QR (or entering a pairing code), no terminal, via the authenticate tool, then the initial sync. Use when the user asks to set up WhatsApp, when the WhatsApp tools (send_message/read_messages) are missing or erroring, or before the first send/read on a new machine.
+description: One-time setup for WhatsApp from Claude — installs the wacli engine (official release download, checksum-verified) and links the device by scanning an in-chat QR (or entering a pairing code), no terminal, via the authenticate tool, then the initial sync. Use when the user asks to set up WhatsApp, when the WhatsApp tools (send_message/read_messages) are missing or erroring, or before the first send/read on a new machine.
 user-invocable: true
 ---
 
@@ -38,36 +38,51 @@ Before installing anything, tell the user plainly, once:
 
 Only proceed once they're OK with it.
 
-## Step 1 — the wacli engine
+## Step 1 — install the wacli engine (you do this, via Bash)
 
-**macOS:** `wacli` ships **bundled inside this plugin** (`bin/darwin/wacli`, a
-universal arm64 + x86_64 binary), so there's normally no install step. The MCP
-server resolves the bundled binary first — it sits next to the server on disk,
-so it's found in both the terminal CLI and the Claude desktop app without
-relying on your shell PATH. Confirm it's reachable:
+The engine is the official binary from the
+[openclaw/wacli](https://github.com/openclaw/wacli) GitHub release. You
+download and install it — the user does nothing and needs no Homebrew or
+developer tools; macOS's built-in `curl`/`tar` do the work. First check
+whether it's already there:
 
 ```sh
-"${CLAUDE_PLUGIN_ROOT:-.}/bin/wacli" --version 2>/dev/null || wacli --version 2>/dev/null || echo MISSING
+"$HOME/.claude/whatsapp/engine/wacli" --version 2>/dev/null || wacli --version 2>/dev/null || echo MISSING
 ```
 
 A version number → done, skip to Step 2.
 
-**Linux / Windows (or `MISSING` on macOS):** no bundled binary for your
-platform — install wacli yourself:
+**`MISSING` on macOS** → install it (pinned version, checksum-verified; the
+universal binary covers Apple Silicon and Intel):
 
 ```sh
-brew install openclaw/tap/wacli
+set -e
+WACLI_VERSION="0.11.1"
+WACLI_SHA256="8500eec89157356f16bb89160f91302d5134c068f791ae2dfea513b765016bec"
+TMP="$(mktemp -d)"
+curl -fsSL -o "$TMP/wacli.tar.gz" \
+  "https://github.com/openclaw/wacli/releases/download/v$WACLI_VERSION/wacli_${WACLI_VERSION}_darwin_universal.tar.gz"
+echo "$WACLI_SHA256  $TMP/wacli.tar.gz" | shasum -a 256 -c -
+mkdir -p "$HOME/.claude/whatsapp/engine"
+tar -xzf "$TMP/wacli.tar.gz" -C "$HOME/.claude/whatsapp/engine" wacli
+rm -rf "$TMP"
+"$HOME/.claude/whatsapp/engine/wacli" --version
 ```
 
-No `brew`? Install Homebrew first
-(`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`),
-or download the matching binary from the
-[latest release](https://github.com/openclaw/wacli/releases) and put `wacli`
-on PATH. Confirm `wacli --version` prints a version.
+A version number at the end → installed. If the checksum line fails, **stop**
+— do not install the file — and re-download once; persistent mismatch means
+the download is corrupted or tampered with, report it instead of proceeding.
+(The pinned hash matches the `checksums.txt` published with the release.)
 
-> Resolution order: `WACLI_PATH` → bundled `bin/darwin/wacli` (macOS) →
+**Linux / Windows:** grab the matching archive from the
+[latest release](https://github.com/openclaw/wacli/releases) the same way
+(verify against its `checksums.txt`), or `brew install openclaw/tap/wacli`,
+and confirm `wacli --version` prints a version.
+
+> Resolution order: `WACLI_PATH` → `~/.claude/whatsapp/engine/wacli` →
 > `wacli` on PATH → `/opt/homebrew/bin` → `/usr/local/bin` →
-> `/home/linuxbrew/.linuxbrew/bin`.
+> `/home/linuxbrew/.linuxbrew/bin`. Power-user alternative:
+> `brew install openclaw/tap/wacli`.
 
 ## Step 2 — the bun runtime
 
@@ -166,7 +181,7 @@ Ctrl+C. To bound local disk growth: `wacli sync --follow --max-db-size 2GB`.
 
 | Symptom | Fix |
 | --- | --- |
-| tools say `wacli engine not found` | macOS: bundled (`bin/darwin/wacli`) — re-check Step 1. Linux/Windows: `brew install openclaw/tap/wacli` or set `WACLI_PATH` |
+| tools say `wacli engine not found` | Step 1 wasn't run (or the engine dir was deleted) — run the Step 1 install. Fallback: `brew install openclaw/tap/wacli` or set `WACLI_PATH` |
 | no send/read tools in session | session predates the plugin enable — restart the session |
 | tools error `not linked` / `pair` | Step 3 — call `authenticate` with their number, relay the code, poll `status` |
 | `authenticate` won't return a code | usually a bad/unreachable number — re-confirm it in `+country` format and retry. If the store `lock` is held by a running `sync --follow`, stop that first |
