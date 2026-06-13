@@ -40,11 +40,20 @@ Send with the **`send_message` MCP tool** (this plugin's WhatsApp server):
 
 If the **approval gate** is enabled (`approval: true` in
 `~/.claude/whatsapp/config.json`), the send also pauses on a client dialog
-showing the recipient and final text — only the user can answer it, and it
-is the final say. A "cancelled" tool result means they declined: stop
-there, don't retry or rephrase to resend. If the result says the client
-can't show approval prompts, relay that message as-is — the send was
-blocked on purpose (fail-closed), not broken.
+showing the recipient and final text — only the user can answer it. A
+"cancelled" tool result means they declined: stop there, don't retry or
+rephrase to resend. If the result says the client can't show approval
+prompts, relay that message as-is — the send was blocked on purpose
+(fail-closed), not broken.
+
+**The gate never replaces your in-chat confirmation.** It is opt-in
+config that may be off, and a dialog you assumed would appear but doesn't
+means the message is already gone — that exact failure has happened. Get
+the explicit yes in chat before calling `send_message`, every time, and
+never tell the user a dialog will review the send unless you've read
+`~/.claude/whatsapp/config.json` this session and seen `approval: true`.
+When the gate IS on, it's the user's independent backstop on top of your
+confirmation, not a substitute for it.
 
 ## Signature (optional, OFF by default)
 
