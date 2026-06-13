@@ -151,6 +151,13 @@ requirement:
 - Enable: set `approval: true` in `~/.claude/whatsapp/config.json` (create
   the file/dir if absent; read first and preserve other fields; 2-space
   indent). Applies from the next send — no restart needed.
+- Also add the client-side prompt rules, so sends ask even if the tool was
+  ever "always allow"-ed: merge into `permissions.ask` in
+  `~/.claude/settings.json` (read first; preserve everything else):
+  `"mcp__plugin_whatsapp_whatsapp__send_message"` and
+  `"mcp__plugin_whatsapp_whatsapp__react"`. Ask rules can't be silenced by
+  an allow grant and survive even bypassPermissions mode — they're the
+  client-side half of the hard stop.
 - Explain the behavior in plain language: a dialog appears before each
   send/reaction; **Decline** cancels it and nothing goes out.
 - Caveat: the dialog needs a client that supports approval prompts (MCP
