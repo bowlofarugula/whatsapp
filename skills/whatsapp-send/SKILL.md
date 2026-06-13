@@ -38,6 +38,14 @@ Send with the **`send_message` MCP tool** (this plugin's WhatsApp server):
 - `reply_to` — quote a message id (the `{id:…}` shown by `read_messages`).
 - `link_preview` — default true; set false to suppress the URL preview.
 
+If the **approval gate** is enabled (`approval: true` in
+`~/.claude/whatsapp/config.json`), the send also pauses on a client dialog
+showing the recipient and final text — only the user can answer it, and it
+is the final say. A "cancelled" tool result means they declined: stop
+there, don't retry or rephrase to resend. If the result says the client
+can't show approval prompts, relay that message as-is — the send was
+blocked on purpose (fail-closed), not broken.
+
 ## Signature (optional, OFF by default)
 
 Messages go out **as-is** unless the user opted into the

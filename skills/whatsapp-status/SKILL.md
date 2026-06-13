@@ -30,6 +30,11 @@ then a "what to do" section only if something failed (point at the matching
    `status` tool** — it confirms wacli installed, the device linked, and the
    store reachable in one shot. Missing while 1–4 pass → the session predates
    the plugin; restart it.
+6. **Config**: read `~/.claude/whatsapp/config.json` (fine if absent) and
+   report the two opt-in safeguards in plain language: the **approval
+   gate** (`approval: true` → every send pauses on a yes/no dialog only
+   the user can answer) and the **AI-disclosure signature**
+   (`signature: true` → "- Sent by Claude for <name>" is appended).
 
 If everything passes, suggest: "WhatsApp yourself a hello, then ask me for
 your recent messages."

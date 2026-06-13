@@ -139,6 +139,26 @@ Then a read: "what are my recent WhatsApp messages?" → `read_messages` should
 return recent threads. (Reads refresh wacli's local store first, so the very
 latest messages may take a sync pass to appear.)
 
+## Optional — the hard approval gate
+
+By default, sends go through the normal review-before-send flow above. For
+users who want a **hard stop** — every outgoing message pauses on a yes/no
+dialog that only a human can answer, shown in the client with the exact
+recipient and text — offer the approval gate, especially on managed or
+shared machines where "Claude must never send without my explicit OK" is a
+requirement:
+
+- Enable: set `approval: true` in `~/.claude/whatsapp/config.json` (create
+  the file/dir if absent; read first and preserve other fields; 2-space
+  indent). Applies from the next send — no restart needed.
+- Explain the behavior in plain language: a dialog appears before each
+  send/reaction; **Decline** cancels it and nothing goes out.
+- Caveat: the dialog needs a client that supports approval prompts (MCP
+  elicitation — Claude Code does). In a client that can't show them, the
+  gate **blocks sends entirely rather than sending unapproved** — that's
+  intentional (fail-closed), and turning the gate off is the only way to
+  send from such a client.
+
 ## Optional — the AI-disclosure signature
 
 By default, messages go out **as-is**: no "- Sent by Claude" stamp. The

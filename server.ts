@@ -655,7 +655,7 @@ async function renderQrToFile(payload: string): Promise<string> {
 // --- mcp -----------------------------------------------------------------------
 
 const mcp = new Server(
-  { name: 'whatsapp', version: '0.1.0' },
+  { name: 'whatsapp', version: '0.4.0' },
   {
     capabilities: { tools: {} },
     instructions: [
