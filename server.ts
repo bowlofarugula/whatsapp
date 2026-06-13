@@ -198,9 +198,9 @@ function explain(stderr: string, code: number | null): string {
 const CONFIG_FILE =
   process.env.WHATSAPP_CONFIG_PATH ?? join(homedir(), '.claude', 'whatsapp', 'config.json')
 
-function readConfig(): { signatureName?: string; signature?: boolean } {
+function readConfig(): { signatureName?: string; signature?: boolean; approval?: boolean } {
   try {
-    return JSON.parse(readFileSync(CONFIG_FILE, 'utf8')) as { signatureName?: string; signature?: boolean }
+    return JSON.parse(readFileSync(CONFIG_FILE, 'utf8')) as { signatureName?: string; signature?: boolean; approval?: boolean }
   } catch {
     return {}
   }
@@ -243,6 +243,72 @@ function signatureBody(name?: string | null, explicit = false): string {
 function withSignature(text: string, name?: string | null, explicit = false): string {
   const sig = signatureBody(name, explicit)
   return sig ? `${text}\n\n${sig}` : text
+}
+
+// --- approval (hard send gate) -------------------------------------------------
+
+// Optional hard stop on outbound actions (send_message, react): when on, every
+// send pauses on an MCP elicitation prompt that only the human can answer in
+// the client UI — the model has no way to approve it itself. OFF by default;
+// turn it on with `approval: true` in config.json or
+// WHATSAPP_REQUIRE_APPROVAL=true (env wins, true/false).
+//
+// Fail-closed by design: if the connected client cannot show elicitation
+// prompts (no `elicitation` capability — e.g. Claude Desktop today), outbound
+// tools are blocked rather than silently sent. Reads are never gated.
+function approvalRequired(): boolean {
+  const env = process.env.WHATSAPP_REQUIRE_APPROVAL
+  if (env != null) return env === 'true'
+  return readConfig().approval === true
+}
+
+// Give the human time to read the prompt — the SDK default request timeout is
+// only 60s, which a real approval can easily outlive.
+const APPROVAL_TIMEOUT_MS = 10 * 60_000
+
+// Returns null when the send may proceed (gate off, or user approved), or a
+// cancellation message to return as the tool result when the user declined.
+// Throws — blocking the send — when approval is required but the client has no
+// way to ask the human.
+async function approveSend(preview: string): Promise<string | null> {
+  if (!approvalRequired()) return null
+  if (!mcp.getClientCapabilities()?.elicitation) {
+    throw new Error(
+      'send blocked: approval mode is on, but this client cannot show approval prompts ' +
+      '(no MCP elicitation support), so nothing was sent. Do not retry or work around this. ' +
+      'The user can send from a client that supports elicitation (e.g. Claude Code), or turn ' +
+      'the gate off with `approval: false` in ' + CONFIG_FILE + '.',
+    )
+  }
+  let res
+  try {
+    res = await mcp.elicitInput(
+      {
+        message: preview,
+        requestedSchema: {
+          type: 'object',
+          properties: {
+            approve: {
+              type: 'boolean',
+              title: 'Approve this send',
+              description: 'true sends the message exactly as shown; anything else cancels.',
+            },
+          },
+          required: ['approve'],
+        },
+      },
+      { timeout: APPROVAL_TIMEOUT_MS },
+    )
+  } catch (e) {
+    throw new Error(
+      'send blocked: the approval prompt failed or timed out before the user answered; ' +
+      `nothing was sent. Do not retry without asking the user. (${e instanceof Error ? e.message : String(e)})`,
+    )
+  }
+  if (res.action !== 'accept' || (res.content as { approve?: boolean } | undefined)?.approve !== true) {
+    return 'cancelled: the user declined the approval prompt; nothing was sent. Treat this as final — do not retry or rephrase to resend.'
+  }
+  return null
 }
 
 // --- store / sync ------------------------------------------------------------
@@ -610,6 +676,11 @@ const mcp = new Server(
       'passes a per-send sign_as. On WhatsApp a visible automation stamp can itself raise ban risk, so',
       'leave it off unless asked. Confirm recipient and exact wording before sending. This drives a real',
       "WhatsApp account on the user's own number — keep sends deliberate and human-paced.",
+      '',
+      'If approval mode is enabled (config `approval: true`), every send_message/react pauses on an',
+      'approval prompt only the human can answer in the client UI. A "cancelled" result means the user',
+      'declined — treat it as final; never retry, rephrase, or look for another way to send. If a send is',
+      'blocked because the client cannot show approval prompts, relay that to the user as-is.',
     ].join('\n'),
   },
 )
@@ -834,23 +905,32 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
         // The optional AI-disclosure signature is OFF by default; it's applied
         // only when enabled in config/env or when sign_as is passed (explicit
         // opt-in). When on and there's no text, the first attachment's caption
-        // carries it.
+        // carries it. Final text/captions are computed up front so the approval
+        // preview shows exactly what would go out.
         const explicitSig = sign_as != null
-        let textSent = false
-        if (text != null) {
-          sendText(to, withSignature(text, sign_as, explicitSig), { reply_to, link_preview, pick: pick_ })
-          textSent = true
+        const finalText = text != null ? withSignature(text, sign_as, explicitSig) : undefined
+        let firstCaption = caption
+        if (finalText == null && files.length > 0) {
+          const sig = signatureBody(sign_as, explicitSig)
+          if (sig) firstCaption = firstCaption ? `${firstCaption}\n\n${sig}` : sig
+        }
+
+        const preview = [
+          `Send WhatsApp message to ${to}?`,
+          finalText != null ? `\n${finalText}` : '',
+          files.length ? `\nAttachments: ${files.join(', ')}${firstCaption ? `\nCaption: ${firstCaption}` : ''}` : '',
+        ].filter(Boolean).join('\n')
+        const cancelled = await approveSend(preview)
+        if (cancelled) return { content: [{ type: 'text', text: cancelled }] }
+
+        if (finalText != null) {
+          sendText(to, finalText, { reply_to, link_preview, pick: pick_ })
         }
         files.forEach((f, i) => {
-          let cap = i === 0 ? caption : undefined
-          if (!textSent && i === 0) {
-            const sig = signatureBody(sign_as, explicitSig)
-            cap = sig ? (cap ? `${cap}\n\n${sig}` : sig) : cap
-          }
-          sendFile(to, f, { caption: cap, reply_to: i === 0 ? reply_to : undefined, pick: pick_ })
+          sendFile(to, f, { caption: i === 0 ? firstCaption : undefined, reply_to: i === 0 ? reply_to : undefined, pick: pick_ })
         })
 
-        const parts = (textSent ? 1 : 0) + files.length
+        const parts = (finalText != null ? 1 : 0) + files.length
         return { content: [{ type: 'text', text: parts === 1 ? 'sent' : `sent ${parts} parts` }] }
       }
 
@@ -931,6 +1011,12 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
         if (!messageId) throw new Error('`message_id` is required (from read_messages, shown as {id:…})')
         const emoji = args.emoji as string | undefined
         const sender = args.sender as string | undefined
+        const reactCancelled = await approveSend(
+          emoji === ''
+            ? `Clear your reaction on message {id:${messageId}} in ${to}?`
+            : `React ${emoji || '👍'} to message {id:${messageId}} in ${to}?`,
+        )
+        if (reactCancelled) return { content: [{ type: 'text', text: reactCancelled }] }
         const cmd = ['send', 'react', '--to', to, '--id', messageId]
         if (emoji != null) cmd.push('--reaction', emoji)
         if (sender) cmd.push('--sender', sender)

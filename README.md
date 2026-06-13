@@ -106,6 +106,13 @@ decision. The guarantees on top:
   `~/.claude/whatsapp/config.json`) or per send (`sign_as`). It's off by
   default partly because, on WhatsApp, a visible automation stamp can itself
   raise the risk of the number being flagged.
+- Need a hard stop on top of the client's permission prompts? Set
+  `approval: true` in `~/.claude/whatsapp/config.json` (or
+  `WHATSAPP_REQUIRE_APPROVAL=true`) and every `send_message`/`react` pauses
+  on an in-client approval prompt (MCP elicitation) showing the recipient
+  and exact text — only a human can answer it, and the model cannot bypass
+  it. Fail-closed: in a client without elicitation support (e.g. Claude
+  Desktop today), sends are blocked instead of going out unapproved.
 - Nothing listens for inbound messages; an incoming message cannot trigger
   Claude. Reads happen only when you ask, about what you asked.
 - Message content Claude reads is treated as data — instructions embedded in
